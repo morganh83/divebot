@@ -100,7 +100,7 @@ StyleCopReport.xml
 *.svclog
 *.scc
 __pycache__/
-*.pyc
+*.py[cod]
 
 # Chutzpah Test files
 _Chutzpah*
