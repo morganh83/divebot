@@ -19,8 +19,6 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-
-
 async def get_noaa_station(lat, lon):
     url = f"{NOAA_BASE_URL}/mdapi/prod/webapi/stations.json?type=tidepredictions&lat={lat}&lon={lon}"
     response = requests.get(url).json()
