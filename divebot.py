@@ -4,9 +4,9 @@ from discord.ext import commands
 
 load_dotenv()
 
-TOKEN = os.getenv('TOKEN')
+TOKEN = os.getenv('DISCORD_TOKEN')
 SECRET = os.getenv('CLIENT_SECRET')
-WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
+# WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
 NOAA_BASE_URL = "https://api.tidesandcurrents.noaa.gov"
 BASE_NWS_URL = "https://api.weather.gov"
 HEADERS = {
