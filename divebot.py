@@ -1,139 +1,109 @@
-import discord, os, requests, math
-from dotenv import load_dotenv
+import os, requests, math, pytz, json, discord, re, interactions
+from datetime import datetime, timedelta
+from geopy.geocoders import Nominatim
 from discord.ext import commands
+from dotenv import load_dotenv
+from weather import GetDiveWeather, UpdateStations
+# from discord.interactions import SlashCommand, cog_ext
+# from discord.interactions import create_button, create_actionrow
+# from discord.interactions import ButtonStyle
+from discord.interactions import SlashCommand, cog_ext
+
 
 load_dotenv()
 
+#### INIT Weather Class ####
+w = GetDiveWeather()
+wu = UpdateStations()
+
+
 TOKEN = os.getenv('DISCORD_TOKEN')
 SECRET = os.getenv('CLIENT_SECRET')
-# WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
-NOAA_BASE_URL = "https://api.tidesandcurrents.noaa.gov"
-
-BASE_NWS_URL = "https://api.weather.gov"
-HEADERS = {
-    'User-Agent': 'YourBotName',  # The NWS API requires a User-Agent header
-    'Accept': 'application/geo+json'
-}
 
 intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
+slash = SlashCommand(bot, sync_commands=True)
 
-async def get_noaa_station(lat, lon):
-    url = f"{NOAA_BASE_URL}/mdapi/prod/webapi/stations.json?type=tidepredictions&lat={lat}&lon={lon}"
-    response = requests.get(url).json()
-    if not response.get('stations'):
-        return None
-    return response['stations'][0]['id']
+##### GUIDE COMMAND #####
+def parse_location_time(input_str):
+    location, _, time = input_str.rpartition(' ')
+    return location, time
 
-async def get_tide_data(station_id):
-    url = f"{NOAA_BASE_URL}/api/prod/datagetter?begin_date=now&range=24&station={station_id}&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json"
-    response = requests.get(url).json()
-    if not response.get('predictions'):
-        return None
-    return response['predictions']
+async def on_component(ctx):
+    if ctx.component_type == 2:
+        guide = ctx.author
+        original_message = await ctx.origin_message()
+        
+        # Extract current guides from the message content
+        prefix = f"{guide.mention} has requested a guided dive"
+        suffix = "! Guides: "
+        guides_str_start = original_message.content.index(suffix) + len(suffix)
+        current_guides_str = original_message.content[guides_str_start:]
 
-async def get_lat_lon_from_city(location):
-    # Try splitting by comma first; if that doesn't work, split by space.
-    if ',' in location:
-        city, state = [part.strip() for part in location.split(",")]
-    else:
-        city, state = location.split() if len(location.split()) == 2 else (None, None)
+        current_guides = [guide.strip() for guide in current_guides_str.split(",")]
 
-    if not city or not state:
-        return None, None
+        # If guide is already listed, remove them; otherwise, add them
+        if str(guide.mention) in current_guides:
+            current_guides.remove(str(guide.mention))
+        else:
+            current_guides.append(str(guide.mention))
 
-    url = f"https://nominatim.openstreetmap.org/search?city={city}&state={state}&country=US&format=json"
-    response = requests.get(url).json()
+        # Update the message content
+        new_content = original_message.content[:guides_str_start] + ", ".join(current_guides)
+        await original_message.edit(content=new_content)
+        
+        # If there's any significant change (like the first guide signing up),
+        # you can send the RSVP to the general channel here
+        if len(current_guides) == 1:
+            general_channel = bot.get_channel(1146672917892051028)
+            await general_channel.send(f"RSVP for a dive led by {', '.join(current_guides)}!")
 
-    if not response:
-        return None, None
 
-    return response[0]['lat'], response[0]['lon']
-
-def haversine_distance(lat1, lon1, lat2, lon2):
+@bot.command(name='weather', help='Fetch tide, weather, and water temperature data for a location')
+async def tide(ctx, *, location: str):
     try:
-        # Convert all to float
-        lat1, lon1, lat2, lon2 = map(float, [lat1, lon1, lat2, lon2])
-    except ValueError:
-        print(f"Error converting lat/lon to float: {lat1}, {lon1}, {lat2}, {lon2}")
-        return float('inf')  # return "infinite" distance so this station is effectively ignored
+        city, state = w.parse_location(location)
+    except ValueError as e:
+        await ctx.send(str(e))
+        return
 
-    R = 6371  # Earth radius in kilometers
+    station_id = w.get_nearest_station(city, state)
+    if not station_id:
+        await ctx.send(f"Could not find a nearby NOAA station for {city}, {state}.")
+        return
 
-    dLat = math.radians(lat2 - lat1)
-    dLon = math.radians(lon2 - lon1)
-    lat1 = math.radians(lat1)
-    lat2 = math.radians(lat2)
+    tide_data = w.fetch_tide_predictions(station_id)
+    water_temp_data = w.fetch_water_temperature(station_id)
+    tide_message = w.format_tide_data(tide_data, water_temp_data, city, state)
 
-    a = math.sin(dLat/2) * math.sin(dLat/2) + math.sin(dLon/2) * math.sin(dLon/2) * math.cos(lat1) * math.cos(lat2)
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return R * c
+    await ctx.send(tide_message)
 
-async def get_noaa_station(lat, lon):
-    url = f"{NOAA_BASE_URL}/mdapi/prod/webapi/stations.json?type=tidepredictions&lat={lat}&lon={lon}&radius=50"
-    response = requests.get(url).json()
-
-    if not response.get('stations'):
-        return None
-
-    try:
-        # Find the nearest station by computing the haversine distance
-        nearest_station = min(response['stations'], key=lambda s: haversine_distance(lat, lon, s['lat'], s['lng']))
-    except Exception as e:
-        print(f"Error computing nearest station: {e}")
-        return None
-
-    return nearest_station['id']
-
-
-@bot.command(name='guide', help='Request a guided dive at a location')
-async def guide(ctx, *, location):
+@cog_ext.cog_slash(name="guide", description="Request a guided dive at a location")
+async def guide(ctx, input_str: str):
+    location, time = parse_location_time(input_str)
     user = ctx.author
     channel = bot.get_channel(1146846581874770011)
-    await channel.send(f'{user} would like to dive at {location}')
-
-
-
-@bot.command(name='weather', help='Get the weather and sea data for a specified location (city, state)')
-async def weather(ctx, *, location):
-    lat, lon = await get_lat_lon_from_city(location)
-    if not lat or not lon:
-        await ctx.send(f"Couldn't find the location: {location}. Please ensure it's in the format 'City, State' or 'City State'.")
-        return
-
-    # Fetching Weather Information
-    points_url = f"{BASE_NWS_URL}/points/{lat},{lon}"
-    response = requests.get(points_url, headers=HEADERS).json()
     
-    forecast_url = response['properties']['forecast']
-    forecast_data = requests.get(forecast_url, headers=HEADERS).json()
+    yes_button = create_button(style=ButtonStyle.green, label="Yes")
+    no_button = create_button(style=ButtonStyle.red, label="No")
+    action_row = create_actionrow(yes_button, no_button)
+
     
-    today_forecast = forecast_data['properties']['periods'][0]
-    
-    weather_msg = (f"Weather for {location}:\n"
-                   f"Condition: {today_forecast['shortForecast']}\n"
-                   f"Air Temperature: {today_forecast['temperature']}°{today_forecast['temperatureUnit']}\n"
-                   f"Wind: {today_forecast['windSpeed']} from {today_forecast['windDirection']}")
-
-    await ctx.send(weather_msg)
-
-    # Fetching NOAA Sea Data Information
-    station_id = await get_noaa_station(lat, lon)
-    if not station_id:
-        await ctx.send(f"Note: Couldn't find a NOAA station near {location} for sea data.")
-        return
-    
-    tide_data = await get_tide_data(station_id)
-    if not tide_data:
-        await ctx.send(f"Note: Couldn't fetch tide data for {location}.")
-        return
-
-    tides_info = "\n".join([f"{entry['t']} - {entry['type']}" for entry in tide_data])
-    sea_data_msg = (f"\nTide Predictions for {location}:\n{tides_info}")
-    await ctx.send(sea_data_msg)
+    await ctx.send(
+    content=f"{ctx.author.mention} has requested a guided dive at {location} on {time}! Guides: None",
+    components=[action_row]
+)
 
 
+    # Store the message ID somewhere for later reference (for example in a dictionary or database)
+
+
+# @bot.command(name='guide', help='Request a guided dive at a location')
+# async def guide(ctx, *, location):
+#     user = ctx.author
+#     channel = bot.get_channel(1146846581874770011)
+#     await channel.send(f"{user.mention} has requested a guided dive at {location}!")
 
 bot.run(TOKEN)

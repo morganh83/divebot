@@ -10,10 +10,30 @@ BASE_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Fetch NOAA data for given city and state")
     parser.add_argument("location", help="City and state in the format 'city, st'", type=str)
+    parser.add_argument("-u", "--update", help="Update NOAA station list", action="store_true")
+    
+    
     return parser.parse_args()
 
 args = parse_arguments()
 
+
+##### GET NEW NOAA STATION LIST #####
+def update_stations_file():
+    DATA_BASE_URL = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type="
+    TYPES = ["watertemp", "physocean", "tidepredictions", "currentpredictions", "currents", "waterlevels"]
+    
+    for station_type in TYPES:
+        response = requests.get(DATA_BASE_URL + station_type)
+        print(f"Station: {station_type}  Response: {response.status_code}")
+        
+        if response.status_code == 200:  # check if request was successful
+            data = response.json()
+            with open(f"noaa_stations_{station_type}.json", "w") as f:
+                # Directly dump the stations data into the file
+                json.dump(data["stations"], f, indent=4)
+        else:
+            print(f"Failed to fetch data for {station_type}. HTTP Status: {response.status_code}")
 
 def convert_utc_to_est(utc_dt):
     utc_dt = pytz.utc.localize(utc_dt)
@@ -46,20 +66,6 @@ def fetch_lat_long_for_city(city, state):
         return (location.latitude, location.longitude)
     else:
         raise ValueError(f"Could not fetch coordinates for {city}, {state}")
-
-##### GET NEW NOAA STATION LIST #####
-# all_noaa_stations = []
-# def get_all_noaa_stations():
-#     url = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions&radius=50"
-#     response = requests.get(url)
-#     data = response.json()
-#     for station in data['stations']:
-#         all_noaa_stations.append(station)
-#     print(all_noaa_stations[1])
-    
-# get_all_noaa_stations()
-# with open("noaa_stations.json", "w") as f:
-#     json.dump(all_noaa_stations, f, indent=4)
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     try:
@@ -98,10 +104,7 @@ def get_nearest_station(city, state, threshold_distance=50):
     # Sort stations
     oceanographic_list_us_str = [str(id) for id in oceanographic_list_us]
     for station in all_noaa_stations:
-        if station['type'] == 'R':
-            continue
         if station["id"] in oceanographic_list_us_str:
-            print(f"Found oceanographic station: {station['id']}")
             oceanographic_stations.append(station)
         else:
             other_stations.append(station)
