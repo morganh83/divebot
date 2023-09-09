@@ -3,7 +3,7 @@
 .env
 
 # Python files
-__pycache__
+__pycache__/
 *.py[cod]
-**/__pycache__
-*.pyc
+venv/
+test*.py

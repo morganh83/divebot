@@ -60,7 +60,7 @@ NOAA_BASE_URL = "https://api.tidesandcurrents.noaa.gov"
 BASE_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
 BASE_NWS_URL = "https://api.weather.gov"
 HEADERS = {
-    'User-Agent': 'DiveBot', 
+    'User-Agent': 'ASDiveBot, contact: morgan.habecker@gmail.com', 
     'Accept': 'application/geo+json'
 }
 
@@ -79,6 +79,7 @@ class UpdateStations:
                 data = response.json()
                 with open(f"noaa_stations_{station_type}.json", "w") as f:
                     json.dump(data["stations"], f, indent=4)
+                
             else:
                 print(f"Failed to fetch data for {station_type}. HTTP Status: {response.status_code}")
 
@@ -157,8 +158,8 @@ class GetDiveWeather:
                     nearest_station_id = station['id']
 
         nearest_station = self.get_station_by_id(nearest_station_id, all_noaa_stations)
-        print(f"Nearest NOAA station: {nearest_station['name']}, ID: {nearest_station['id']}\nThe station is {round(nearest_distance)} miles from {city}.")
-        return nearest_station_id
+        msg = f"`*Nearest NOAA station: {nearest_station['name']}, ID: {nearest_station['id']}\nThe station is {round(nearest_distance)} miles from {city.capitalize()}, {state.upper()}.*`"
+        return nearest_station_id, msg
 
     ##### FETCH TIDE DATA #####
     def fetch_tide_predictions(self, station_id):
@@ -194,22 +195,6 @@ class GetDiveWeather:
             print("Failed to fetch water temperature.")
             return None
 
-    # def parse_location(input_str):
-    #     words = input_str.split()
-        
-    #     for i in range(1, len(words)):
-    #         potential_state = " ".join(words[i:]).upper() # Try joining multiple words for state names like New York
-    #         if potential_state in state_abbreviations:
-    #             city = " ".join(words[:i])
-    #             state = state_abbreviations[potential_state]
-    #             return city, state
-    #         elif potential_state in state_abbreviations.values():
-    #             city = " ".join(words[:i])
-    #             state = potential_state
-    #             return city, state
-
-    #     # If function hasn't returned by now, then the format wasn't recognized
-    #     raise ValueError("Could not parse location string. Please use a recognized format.")
     def parse_location(self, input_str):
         words = input_str.split()
 
@@ -235,17 +220,49 @@ class GetDiveWeather:
         # If function hasn't returned by now, then the format wasn't recognized
         raise ValueError("Could not parse location string. Please use a recognized format.")
 
+    def weather(self, city, state):
+        lat, lon = self.fetch_lat_long_for_city(city, state)
+        if not lat or not lon:
+            return "Couldn't find the location."
+
+        points_url = f"{BASE_NWS_URL}/points/{lat},{lon}"
+        response = requests.get(points_url, headers=HEADERS).json()
+        # if response.status_code != 200:
+        #     return "Couldn't find the location or the NWS API is down."
+        
+        
+        forecast_url = response['properties']['forecast']
+        forecast_data = requests.get(forecast_url, headers=HEADERS).json()
+        # print(f"\n{forecast_data}\n")
+        today_forecast = forecast_data['properties']['periods'][0]
+        extended_forcast = forecast_data['properties']['periods']
+        extend = []
+        for i in extended_forcast:
+            extend.append(i)
+            # print(f"\nDate: {i['name']}\nTemperature: {i['temperature']}°{i['temperatureUnit']}\nWind: {i['windSpeed']} from {i['windDirection']}\nForecast: {i['detailedForecast']}\n")
+        
+        today = (f"__**Today's Weather Forecast:**__\n"
+            f"Temperature: {today_forecast['temperature']}°{today_forecast['temperatureUnit']}\n"
+            f"Wind: {today_forecast['windSpeed']} from the {today_forecast['windDirection']}\n"
+            f"Conditions: {today_forecast['shortForecast']}\n"
+            f"Forecast: {today_forecast['detailedForecast']}\n"
+            )
+
+        return today, extend
 
     def format_tide_data(self, tide_data, water_temp_data, city, state):
         now = datetime.utcnow()
         now_est = self.convert_utc_to_est(now)
-        output = [f"DiveBot Weather Report for {city}, {state} as of {now_est.strftime('%m/%d/%Y at %I:%M %p')}"]
-        # output = [f"Last Updated: {now_est.strftime('%m/%d/%Y at %I:%M %p')} EST\n"]
-        # print(f"Station: {tide_data['metadata']['name']}\n")
-
+        output = []
+        output.append(f">>> ## __DiveBot Weather Report for {city.capitalize()}, {state.upper()} as of {now_est.strftime('%m/%d/%Y at %I:%M %p')}__\n")
+        output.append(self.weather(city, state)[0])
+        
+        output.append("__**Oceanic Data for Today:**__")
+        output.append(f"{self.get_nearest_station(city, state)[1]}")
+        
         next_tide = None
         today_tides = []
-
+        
         for prediction in tide_data['predictions']:
             tide_time = datetime.strptime(prediction['t'], '%Y-%m-%d %H:%M')
             if tide_time > now and not next_tide:
@@ -256,17 +273,21 @@ class GetDiveWeather:
 
         if next_tide:
             formatted_time = datetime.strptime(next_tide['t'], '%Y-%m-%d %H:%M').strftime('%I:%M %p')
-            output.append(f"Next Tide: {'High' if next_tide['type'] == 'H' else 'Low'} at {formatted_time} with a level of {next_tide['v']}ft\n")
+            output.append(f"- Next Tide: {'High' if next_tide['type'] == 'H' else 'Low'} at {formatted_time} with a level of {next_tide['v']}ft")
 
         if water_temp_data:
             water_temp = water_temp_data.get('data', [{}])[0].get('v', None)
             if water_temp:
-                output.append(f"Water Temperature: {water_temp}°F\n")
+                output.append(f"- Water Temperature: {water_temp}°F\n")
 
-        output.append("Today's Tides:")
+        output.append("__**Today's Tides:**__")
         for tide in today_tides:
             formatted_time = datetime.strptime(tide['t'], '%Y-%m-%d %H:%M').strftime('%I:%M %p')
             output.append(f"- {'High' if tide['type'] == 'H' else 'Low'} at {formatted_time} with a level of {tide['v']}ft")
+        
+        # output.append("\nExtended Forecast:")
+        # for i in self.weather(city, state)[1]:
+        #     output.append(f"\nDate: {i['name']}\nTemperature: {i['temperature']}°{i['temperatureUnit']}\nWind: {i['windSpeed']} from {i['windDirection']}\nForecast: {i['shortForecast']}\n")
         
         return "\n".join(output)
 

@@ -4,3 +4,4 @@ cookies-discord-components
 requests
 geopy
 pytz
+discord-py-interactions
