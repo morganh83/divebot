@@ -124,7 +124,7 @@ async def guide(ctx: SlashContext, location: str, date: str = None, time: str = 
     
     if time is None:
         await channel.send(
-            content=f"{ctx.author} has requested a guided dive at {location}!",
+            content=f"{ctx.author.nickname} has requested a guided dive at {location}!",
             components=[action_row]
             )
     else:
