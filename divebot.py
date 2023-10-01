@@ -8,6 +8,7 @@ from weather import GetDiveWeather, UpdateStations
 from asyncio import TimeoutError
 import asyncio
 from interactions.api.events import Component
+# interactions documentation: https://interactions-py.github.io/interactions.py/Guides/
 
 load_dotenv()
 
@@ -121,7 +122,11 @@ async def guide(ctx: SlashContext, location: str, date: str = None, time: str = 
     no_button = Button(style=ButtonStyle.RED, label="Decline", custom_id="guide_no")
     
     action_row = ActionRow(yes_button, no_button)
-    
+    user_request = {
+        'location': location,
+        'date': date,
+        'time': time
+    }
     if time is None:
         await channel.send(
             content=f"{ctx.author.nickname} has requested a guided dive at {location}!",
@@ -139,12 +144,30 @@ async def on_component(event: Component):
     match ctx.custom_id:
         case "guide_yes":
             await ctx.send(f"{ctx.author.mention} has volunteered to guide this dive!")
-            # Disable the buttons
-            print("YES")
-            # await ctx.send(f"{ctx.author.mention} has volunteered to guide this dive!")        
+            
+            # Extract details from the original message
+            location_pattern = r"requested a guided dive at ([^!]+)"
+            original_message = await ctx.channel.fetch_message(ctx.message_id)
+
+            match = re.search(location_pattern, original_message.content)
+
+
+            location = match.group(1) if match else "unknown location"
+            
+            # Create event details
+            event_details = {
+                'title': f"Guided Dive at {location}",
+                'description': f"Guided by: {ctx.author.mention}",
+                'date': None,  # Can be updated later
+                'time': None  # Can be updated later
+            }
+            event_details['description'] += f", {ctx.author.mention}"
+            
+            # You might need to store event_details somewhere (e.g., a database or in-memory store).
+            # This will allow you to update event details later.
+
         case "guide_no":
             await ctx.send(f"{ctx.author.mention} has declined to guide this dive.")
-            print("NO")
 
 @listen()
 async def on_ready():

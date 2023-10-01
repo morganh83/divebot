@@ -69,17 +69,15 @@ class UpdateStations:
     def __init__(self):
         self.DATA_BASE_URL = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type="
         self.TYPES = ["watertemp", "physocean", "tidepredictions", "currentpredictions", "currents", "waterlevels"]
-    
+
     def update_stations_file(self):
         for station_type in self.TYPES:
             response = requests.get(self.DATA_BASE_URL + station_type)
             print(f"Station: {station_type}  Response: {response.status_code}")
-            
             if response.status_code == 200: 
                 data = response.json()
                 with open(f"noaa_stations_{station_type}.json", "w") as f:
                     json.dump(data["stations"], f, indent=4)
-                
             else:
                 print(f"Failed to fetch data for {station_type}. HTTP Status: {response.status_code}")
 
