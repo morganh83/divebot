@@ -137,6 +137,8 @@ async def guide(ctx: SlashContext, location: str, date: str = None, time: str = 
             content=f"{user} has requested a guided dive at {location} at {date} - {time}!",
             components=[action_row]
             )
+    
+    await ctx.send(f"Your request for a guided dive at {location} has been received!")
 
 @listen()
 async def on_component(event: Component):
