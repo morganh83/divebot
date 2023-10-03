@@ -102,7 +102,7 @@ async def weather(ctx, *, city: str, state: str):
         },
         {
             "name": "date",
-            "description": "Requested time for the dive (optional). e.g. 10am or 1700",
+            "description": "Requested date for the dive (optional). e.g. mm/dd or mm/dd/yyyy",
             "type": OptionType.STRING,
             "required": False
         }, 
