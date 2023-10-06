@@ -282,11 +282,11 @@ class GetDiveWeather:
         for tide in today_tides:
             formatted_time = datetime.strptime(tide['t'], '%Y-%m-%d %H:%M').strftime('%I:%M %p')
             output.append(f"- {'High' if tide['type'] == 'H' else 'Low'} at {formatted_time} with a level of {tide['v']}ft")
-        
+
         # output.append("\nExtended Forecast:")
         # for i in self.weather(city, state)[1]:
         #     output.append(f"\nDate: {i['name']}\nTemperature: {i['temperature']}°{i['temperatureUnit']}\nWind: {i['windSpeed']} from {i['windDirection']}\nForecast: {i['shortForecast']}\n")
-        
+
         return "\n".join(output)
 
     def convert_state_to_full_name(self, state):

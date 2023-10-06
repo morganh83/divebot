@@ -1,12 +1,12 @@
 import os, requests, math, pytz, json, re #discord
 from interactions import ButtonStyle, Button, ActionRow, slash_command, SlashContext, Client, Intents, listen, OptionType, slash_option
-from datetime import datetime, timedelta
-from geopy.geocoders import Nominatim
+# from datetime import datetime, timedelta
+# from geopy.geocoders import Nominatim
 from discord.ext import commands
 from dotenv import load_dotenv
 from weather import GetDiveWeather, UpdateStations
-from asyncio import TimeoutError
-import asyncio
+# from asyncio import TimeoutError
+# import asyncio
 from interactions.api.events import Component
 # interactions documentation: https://interactions-py.github.io/interactions.py/Guides/
 
@@ -19,6 +19,7 @@ wu = UpdateStations()
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 SECRET = os.getenv('CLIENT_SECRET')
+GUIDE_CHANNEL = os.getenv('GUIDE_CHANNEL')
 
 # bot = commands.Bot(command_prefix='!', intents=intents)
 bot = Client(intents=Intents.DEFAULT)
@@ -55,7 +56,7 @@ async def on_component(ctx):
         # If there's any significant change (like the first guide signing up),
         # you can send the RSVP to the general channel here
         if len(current_guides) == 1:
-            general_channel = bot.get_channel(1146672917892051028)
+            general_channel = bot.get_channel(GUIDE_CHANNEL)
             await general_channel.send(f"RSVP for a dive led by {', '.join(current_guides)}!")
 
 @slash_command(
@@ -117,6 +118,7 @@ async def weather(ctx, *, city: str, state: str):
 async def guide(ctx: SlashContext, location: str, date: str = None, time: str = None):
     user = ctx.author.nickname
     channel = bot.get_channel(1146846581874770011)
+    # 1146846581874770011
     
     yes_button = Button(style=ButtonStyle.GREEN, label="Accept", custom_id="guide_yes")
     no_button = Button(style=ButtonStyle.RED, label="Decline", custom_id="guide_no")
@@ -138,7 +140,7 @@ async def guide(ctx: SlashContext, location: str, date: str = None, time: str = 
             components=[action_row]
             )
     
-    await ctx.send(f"Your request for a guided dive at {location} has been received!")
+    await ctx.send(f"Your request for a guided dive at {location} has been received!", ephemeral=True)
 
 @listen()
 async def on_component(event: Component):
